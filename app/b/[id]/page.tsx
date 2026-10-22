@@ -11,7 +11,7 @@ export default async function BookingPage({ params }: { params: Promise<{ id: st
         <h1>Your booking</h1>
         <a className="pill" href="/">Back to slots</a>
       </header>
-      {booking ? <Confirmation booking={booking} /> : <p className="banner-error">We could not find that booking.</p>}
+      {booking ? <Confirmation booking={booking} showLookup={false} /> : <p className="banner-error">We could not find that booking.</p>}
     </>
   );
 }

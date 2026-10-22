@@ -234,8 +234,14 @@ dd { margin: 0; word-break: break-all; font-weight: 600; }
 .dark .card { background: transparent; padding: 0; }
 .dark dt { color: var(--dark-muted); }
 .dark .status-confirmed { color: #6ee0a0; }
+.actions { display: flex; gap: 10px; flex-wrap: wrap; }
+a.btn { display: inline-block; text-decoration: none; text-align: center; }
 .dark a { color: var(--blue); text-underline-offset: 3px; }
-.dark a:hover { text-decoration: underline; }
+.dark .actions { margin-bottom: 14px; }
+.dark a.btn { color: #14161a; }
+.dark a.btn.ghost-dark { color: var(--dark-text); border-color: #55565b; }
+.dark a.btn.ghost-dark:hover { background: rgba(255, 255, 255, 0.1); border-color: var(--dark-text); }
+.dark a:not(.btn):hover { text-decoration: underline; }
 
 /* ---------- small screens ---------- */
 @media (max-width: 900px) {

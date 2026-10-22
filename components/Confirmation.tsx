@@ -12,7 +12,7 @@ export type ConfirmedBooking = {
 };
 
 // Rendered after mount so the visitor's local time zone is used, not the server's.
-export function Confirmation({ booking }: { booking: ConfirmedBooking }) {
+export function Confirmation({ booking, showLookup = true }: { booking: ConfirmedBooking; showLookup?: boolean }) {
   const [when, setWhen] = useState("");
   useEffect(() => {
     const s = new Date(booking.start);
@@ -35,14 +35,18 @@ export function Confirmation({ booking }: { booking: ConfirmedBooking }) {
         <dt>Status</dt>
         <dd className={`status-${booking.status}`}>{booking.status}</dd>
       </dl>
-      <p>
-        <a href={`/b/${encodeURIComponent(booking.id)}`}>Look this booking up again</a>
-      </p>
-      {booking.email && (
-        <p>
-          <a href={`/my-bookings?email=${encodeURIComponent(booking.email)}`}>See all my bookings</a>
-        </p>
-      )}
+      <div className="actions">
+        {booking.email && (
+          <a className="btn" href={`/my-bookings?email=${encodeURIComponent(booking.email)}`}>
+            See all my bookings
+          </a>
+        )}
+        {showLookup && (
+          <a className="btn ghost-dark" href={`/b/${encodeURIComponent(booking.id)}`}>
+            Look this booking up again
+          </a>
+        )}
+      </div>
     </div>
   );
 }
