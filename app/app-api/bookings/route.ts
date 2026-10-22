@@ -1,7 +1,16 @@
 import { err, json, readObject, send } from "@/lib/http";
-import { createBooking } from "@/lib/service";
+import { createBooking, listBookingsDetailed } from "@/lib/service";
 
 export const dynamic = "force-dynamic";
+
+export async function GET(req: Request) {
+  try {
+    return send(await listBookingsDetailed(new URL(req.url).searchParams));
+  } catch (e) {
+    console.error(e);
+    return json({ error: "internal error" }, 500);
+  }
+}
 
 export async function POST(req: Request) {
   try {

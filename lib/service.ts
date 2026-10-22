@@ -293,3 +293,21 @@ export async function listBookings(params: URLSearchParams): Promise<Result> {
   const next = rows.length > limit ? Buffer.from(String(page[page.length - 1].seq)).toString("base64url") : null;
   return { status: 200, body: { bookings: page.map(toBooking), next_cursor: next } };
 }
+
+/** Page-facing list: each booking also carries its slot's provider and times. */
+export async function listBookingsDetailed(params: URLSearchParams): Promise<Result> {
+  const r = await listBookings(params);
+  if (r.status !== 200) return r;
+  const { bookings, next_cursor } = r.body as { bookings: Booking[]; next_cursor: string | null };
+
+  const slots = new Map<string, { provider: string; start: string; end: string }>();
+  const ids = [...new Set(bookings.map((b) => b.slot_id))];
+  if (ids.length > 0) {
+    const { rows } = await pool().query(
+      `SELECT id, provider, start_raw AS start, end_raw AS "end" FROM slots WHERE id = ANY($1::text[])`,
+      [ids],
+    );
+    for (const s of rows) slots.set(s.id, { provider: s.provider, start: s.start, end: s.end });
+  }
+  return { status: 200, body: { bookings: bookings.map((b) => ({ ...b, ...slots.get(b.slot_id) })), next_cursor } };
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { bookingSchema, normalizeBooking } from "@/lib/schemas";
 import type { Slot } from "@/lib/types";
 import { Confirmation, type ConfirmedBooking } from "./Confirmation";
@@ -10,6 +10,9 @@ type FieldErrors = Partial<Record<"name" | "email" | "slot_id", string>>;
 
 const timeFmt = new Intl.DateTimeFormat(undefined, { timeStyle: "short" });
 const dayFmt = new Intl.DateTimeFormat(undefined, { weekday: "long", month: "long", day: "numeric" });
+
+const isStarted = (s: Slot) => new Date(s.start).getTime() <= Date.now();
+const isOpen = (s: Slot) => s.available && !isStarted(s);
 
 export default function BookingApp() {
   const [slots, setSlots] = useState<Slot[] | null>(null);
@@ -24,6 +27,7 @@ export default function BookingApp() {
   const [idemKey, setIdemKey] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState<ConfirmedBooking | null>(null);
   const [retryable, setRetryable] = useState(false);
+  const sideRef = useRef<HTMLElement>(null);
 
   const loadSlots = useCallback(async () => {
     try {
@@ -40,19 +44,26 @@ export default function BookingApp() {
     loadSlots();
   }, [loadSlots]);
 
-  const providers = useMemo(() => [...new Set((slots ?? []).map((s) => s.provider))].sort(), [slots]);
-  const visible = useMemo(
-    () => (slots ?? []).filter((s) => !provider || s.provider === provider),
-    [slots, provider],
-  );
+  const providers = useMemo(() => {
+    const byName = new Map<string, Slot[]>();
+    for (const s of slots ?? []) byName.set(s.provider, [...(byName.get(s.provider) ?? []), s]);
+    return [...byName].sort(([a], [b]) => a.localeCompare(b)).map(([name, list]) => {
+      const open = list.filter(isOpen);
+      return { name, open: open.length, next: open[0] };
+    });
+  }, [slots]);
+
+  const openCount = useMemo(() => (slots ?? []).filter(isOpen).length, [slots]);
+
   const days = useMemo(() => {
     const groups = new Map<string, Slot[]>();
-    for (const s of visible) {
+    for (const s of slots ?? []) {
+      if (provider && s.provider !== provider) continue;
       const day = dayFmt.format(new Date(s.start));
       groups.set(day, [...(groups.get(day) ?? []), s]);
     }
     return [...groups];
-  }, [visible]);
+  }, [slots, provider]);
 
   function pick(slot: Slot) {
     setSelected(slot);
@@ -60,6 +71,10 @@ export default function BookingApp() {
     setBanner("");
     setRetryable(false);
     setIdemKey(null);
+    // On narrow screens the form sits above the list; bring it into view.
+    if (window.matchMedia("(max-width: 900px)").matches) {
+      sideRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
   }
 
   async function submit() {
@@ -123,114 +138,166 @@ export default function BookingApp() {
     }
   }
 
-  if (confirmed) {
-    return (
-      <>
-        <h1>Booking confirmed</h1>
-        <Confirmation booking={confirmed} />
-        <button
-          className="secondary"
-          onClick={() => {
-            setConfirmed(null);
-            setSelected(null);
-            setIdemKey(null);
-            loadSlots();
-          }}
-        >
-          Book another
-        </button>
-      </>
-    );
+  function bookAnother() {
+    setConfirmed(null);
+    setSelected(null);
+    setIdemKey(null);
+    loadSlots();
   }
 
-  if (selected) {
-    const s = new Date(selected.start);
-    return (
-      <>
-        <h1>Book with {selected.provider}</h1>
-        <p>
-          {dayFmt.format(s)}, {timeFmt.format(s)}
-        </p>
-        {banner && <p className="banner-error" role="alert">{banner}</p>}
-        <form
-          className="card"
-          noValidate
-          onSubmit={(e) => {
-            e.preventDefault();
-            submit();
-          }}
-        >
-          <label>
-            Name
-            <input
-              value={fields.name}
-              autoComplete="name"
-              onChange={(e) => setFields({ ...fields, name: e.target.value })}
-            />
-            {errors.name && <p className="field-error">{errors.name}</p>}
-          </label>
-          <label>
-            Email
-            <input
-              type="email"
-              value={fields.email}
-              autoComplete="email"
-              onChange={(e) => setFields({ ...fields, email: e.target.value })}
-            />
-            {errors.email && <p className="field-error">{errors.email}</p>}
-          </label>
-          {errors.slot_id && <p className="field-error">{errors.slot_id}</p>}
-          <div className="row">
-            <button type="submit" disabled={submitting}>
-              {submitting ? "Booking..." : retryable ? "Retry" : "Book"}
-            </button>
-            <button type="button" className="secondary" disabled={submitting} onClick={() => setSelected(null)}>
-              Back
-            </button>
-          </div>
-        </form>
-      </>
-    );
-  }
+  const selectedStart = selected ? new Date(selected.start) : null;
 
   return (
     <>
-      <h1>Book a clinic appointment</h1>
-      {banner && <p className="banner-error" role="alert">{banner}</p>}
-      <label>
-        Provider
-        <select value={provider} onChange={(e) => setProvider(e.target.value)}>
-          <option value="">All providers</option>
-          {providers.map((p) => (
-            <option key={p}>{p}</option>
-          ))}
-        </select>
-      </label>
-      {loadError && (
-        <p className="banner-error">
-          {loadError} <button className="secondary" onClick={loadSlots}>Retry</button>
-        </p>
-      )}
-      {slots === null && !loadError && <p>Loading slots...</p>}
-      {slots !== null && days.length === 0 && <p>No slots available.</p>}
-      {days.map(([day, list]) => (
-        <section key={day}>
-          <h2>{day}</h2>
-          {list.map((s) => {
-            const started = new Date(s.start).getTime() <= Date.now();
-            const disabled = started || !s.available;
-            return (
-              <button key={s.id} className="slot" disabled={disabled} onClick={() => pick(s)}>
-                <span>
-                  {timeFmt.format(new Date(s.start))}
-                  <small>{s.provider}</small>
-                </span>
-                <span className="tag">{started ? "Started" : !s.available ? "Booked" : "Available"}</span>
+      <header className="top">
+        <h1>Book an appointment</h1>
+        <span className="pill">{slots === null ? "Loading" : `${openCount} open`}</span>
+      </header>
+
+      <div className="grid">
+        <div className="col">
+          <h2>Providers</h2>
+          <div className="providers">
+            <button
+              className="provider tone-all"
+              aria-pressed={provider === ""}
+              onClick={() => setProvider("")}
+            >
+              <div>
+                <div className="badge">All</div>
+                <b>All providers</b>
+              </div>
+              <span>{openCount} open slots</span>
+            </button>
+            {providers.map((p, i) => (
+              <button
+                key={p.name}
+                className={`provider tone-${i % 3}`}
+                aria-pressed={provider === p.name}
+                onClick={() => setProvider(provider === p.name ? "" : p.name)}
+              >
+                <div>
+                  <div className="badge">{p.name.replace(/^Dr\.?\s*/i, "").charAt(0).toUpperCase()}</div>
+                  <b>{p.name}</b>
+                </div>
+                <div>
+                  <span>{p.open} open slots</span>
+                  {p.next && <span className="next">Next {timeFmt.format(new Date(p.next.start))}</span>}
+                </div>
               </button>
-            );
-          })}
-        </section>
-      ))}
+            ))}
+          </div>
+
+          <h2>
+            Slots
+            <small>{provider || "all providers"}</small>
+          </h2>
+          {loadError && (
+            <p className="banner-error">
+              {loadError}{" "}
+              <button className="btn small" onClick={loadSlots}>Retry</button>
+            </p>
+          )}
+          {slots === null && !loadError && <p className="lede">Loading slots...</p>}
+          {slots !== null && days.length === 0 && <p className="status off">No slots available.</p>}
+          {days.map(([day, list]) => (
+            <section key={day}>
+              <p className="day">{day}</p>
+              {list.map((s) => {
+                const started = isStarted(s);
+                const open = isOpen(s);
+                return (
+                  <div
+                    key={s.id}
+                    className={`row-slot${open ? "" : " disabled"}${selected?.id === s.id ? " selected" : ""}`}
+                    role="button"
+                    tabIndex={open ? 0 : -1}
+                    aria-disabled={!open}
+                    aria-label={`${s.provider} at ${timeFmt.format(new Date(s.start))}${open ? "" : ", unavailable"}`}
+                    onClick={() => open && pick(s)}
+                    onKeyDown={(e) => {
+                      if (open && (e.key === "Enter" || e.key === " ")) {
+                        e.preventDefault();
+                        pick(s);
+                      }
+                    }}
+                  >
+                    <span className="time">{timeFmt.format(new Date(s.start))}</span>
+                    <span className="who">{s.provider}</span>
+                    <span className={`status ${open ? "open" : "off"}`}>
+                      {started ? "Started" : s.available ? "Available" : "Booked"}
+                    </span>
+                    <button className="btn small" tabIndex={-1} disabled={!open}>
+                      {selected?.id === s.id ? "Selected" : "Book"}
+                    </button>
+                  </div>
+                );
+              })}
+            </section>
+          ))}
+        </div>
+
+        <aside className="dark" ref={sideRef}>
+          {confirmed ? (
+            <>
+              <h2>You&apos;re booked!</h2>
+              <Confirmation booking={confirmed} />
+              <button className="btn" onClick={bookAnother}>Book another</button>
+            </>
+          ) : selected && selectedStart ? (
+            <>
+              <h2>Book with {selected.provider}</h2>
+              <p className="meta">
+                <b>{timeFmt.format(selectedStart)}</b>
+                {dayFmt.format(selectedStart)}
+              </p>
+              {banner && <p className="banner-error" role="alert">{banner}</p>}
+              <form
+                noValidate
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  submit();
+                }}
+              >
+                <label>
+                  Name
+                  <input
+                    value={fields.name}
+                    autoComplete="name"
+                    onChange={(e) => setFields({ ...fields, name: e.target.value })}
+                  />
+                  {errors.name && <p className="field-error">{errors.name}</p>}
+                </label>
+                <label>
+                  Email
+                  <input
+                    type="email"
+                    value={fields.email}
+                    autoComplete="email"
+                    onChange={(e) => setFields({ ...fields, email: e.target.value })}
+                  />
+                  {errors.email && <p className="field-error">{errors.email}</p>}
+                </label>
+                {errors.slot_id && <p className="field-error">{errors.slot_id}</p>}
+                <div className="row">
+                  <button type="submit" className="btn" disabled={submitting}>
+                    {submitting ? "Booking..." : retryable ? "Retry" : "Confirm booking"}
+                  </button>
+                  <button type="button" className="btn ghost" disabled={submitting} onClick={() => setSelected(null)}>
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </>
+          ) : (
+            <>
+              <h2>Book in under a minute</h2>
+              <p className="lede">Choose an open slot from the list, enter your name and email, and you&apos;re done.</p>
+              {banner && <p className="banner-error" role="alert">{banner}</p>}
+            </>
+          )}
+        </aside>
+      </div>
     </>
   );
 }

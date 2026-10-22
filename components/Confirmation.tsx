@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 export type ConfirmedBooking = {
   id: string;
+  email?: string;
   provider: string;
   start: string;
   end: string;
@@ -34,7 +35,14 @@ export function Confirmation({ booking }: { booking: ConfirmedBooking }) {
         <dt>Status</dt>
         <dd className={`status-${booking.status}`}>{booking.status}</dd>
       </dl>
-      <a href={`/b/${encodeURIComponent(booking.id)}`}>Look this booking up again</a>
+      <p>
+        <a href={`/b/${encodeURIComponent(booking.id)}`}>Look this booking up again</a>
+      </p>
+      {booking.email && (
+        <p>
+          <a href={`/my-bookings?email=${encodeURIComponent(booking.email)}`}>See all my bookings</a>
+        </p>
+      )}
     </div>
   );
 }

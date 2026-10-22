@@ -7,9 +7,11 @@ export default async function BookingPage({ params }: { params: Promise<{ id: st
   const booking = await getBookingWithSlot((await params).id);
   return (
     <>
-      <h1>Your booking</h1>
-      {booking ? <Confirmation booking={booking} /> : <p>We could not find that booking.</p>}
-      <a href="/">Back to slots</a>
+      <header className="top">
+        <h1>Your booking</h1>
+        <a className="pill" href="/">Back to slots</a>
+      </header>
+      {booking ? <Confirmation booking={booking} /> : <p className="banner-error">We could not find that booking.</p>}
     </>
   );
 }
