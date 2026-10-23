@@ -2,8 +2,8 @@
 
 Clinic booking API plus a small web page, built to the Koya spec (OpenAPI 3.0.3, v1.0) from `Clinic Booking API PRD.pdf`. One Next.js app (App Router) on Vercel, Neon Postgres for storage.
 
-- Live URL: _fill in after deploy_
-- API base URL: same as the live URL (routes are served at the root)
+- Live URL: https://clinic-booking-api-snowy.vercel.app
+- API base URL: https://clinic-booking-api-snowy.vercel.app (routes are served at the root; no trailing slash)
 
 ## Run locally
 
@@ -35,9 +35,11 @@ BASE_URL=http://localhost:3000 API_KEY=... npm run smoke
 
 ## Web page
 
-`/` lists slots grouped by day in the visitor's local time with a provider filter, then a book form, then a confirmation (`/b/{id}` looks a booking up again). The browser only calls `/app-api/*`, which calls the service layer directly, so the API key never reaches the client bundle. Each form submission generates one `Idempotency-Key` that is reused on retry.
+`/` lists slots grouped by day in the visitor's local time, with provider cards as the filter. Booked and already-started slots are visible but disabled. Picking a slot opens the book form (name and email, same zod schema as the server), then a confirmation. `/b/{id}` looks a booking up again.
 
-The optional "My bookings" view is not built. If added, it would expose bookings to anyone who knows an email, which is acceptable for the assessment.
+`/my-bookings` lists bookings by email (case-insensitive, 10 per page with "Load more") and lets the visitor cancel upcoming ones. **Note:** there are no accounts, so anyone who knows an email address can see its bookings and cancel them. That is acceptable for this assessment.
+
+The browser only calls `/app-api/*`, which calls the service layer directly, so the API key never reaches the client bundle. Each form submission generates one `Idempotency-Key` that is reused on retry. A ref-based in-flight guard means a double click sends one request.
 
 ## Deploy
 

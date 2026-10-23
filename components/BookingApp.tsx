@@ -24,7 +24,9 @@ export default function BookingApp() {
   const [banner, setBanner] = useState("");
   const [submitting, setSubmitting] = useState(false);
   // One key per form submission; reused on retry so a retry can never book twice.
-  const [idemKey, setIdemKey] = useState<string | null>(null);
+  // Refs, not state: a double click fires twice before React re-renders.
+  const keyRef = useRef<string | null>(null);
+  const inFlight = useRef(false);
   const [confirmed, setConfirmed] = useState<ConfirmedBooking | null>(null);
   const [retryable, setRetryable] = useState(false);
   const sideRef = useRef<HTMLElement>(null);
@@ -70,7 +72,7 @@ export default function BookingApp() {
     setErrors({});
     setBanner("");
     setRetryable(false);
-    setIdemKey(null);
+    keyRef.current = null;
     // On narrow screens the form sits above the list; bring it into view.
     if (window.matchMedia("(max-width: 900px)").matches) {
       sideRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -78,7 +80,7 @@ export default function BookingApp() {
   }
 
   async function submit() {
-    if (!selected || submitting) return;
+    if (!selected || inFlight.current) return;
     const body = normalizeBooking({ slot_id: selected.id, ...fields });
     const parsed = bookingSchema.safeParse(body);
     if (!parsed.success) {
@@ -88,12 +90,12 @@ export default function BookingApp() {
       return;
     }
 
+    inFlight.current = true;
     setSubmitting(true);
     setErrors({});
     setBanner("");
     setRetryable(false);
-    const key = idemKey ?? crypto.randomUUID();
-    setIdemKey(key);
+    const key = (keyRef.current ??= crypto.randomUUID());
 
     try {
       const res = await fetch("/app-api/bookings", {
@@ -108,7 +110,7 @@ export default function BookingApp() {
         setConfirmed(booking);
         return;
       }
-      setIdemKey(null); // a definitive answer: the next attempt is a new submission
+      keyRef.current = null; // a definitive answer: the next attempt is a new submission
       if (res.status === 400) {
         const msg: string = data.error ?? "Invalid request";
         const field = (["name", "email", "slot_id"] as const).find((f) => msg.startsWith(f));
@@ -126,7 +128,7 @@ export default function BookingApp() {
         const secs = Number(res.headers.get("Retry-After")) || 60;
         setBanner(`Too many attempts, try again in ${secs} seconds`);
       } else {
-        setIdemKey(key);
+        keyRef.current = key; // retry must reuse the same key
         setBanner("Something went wrong.");
         setRetryable(true);
       }
@@ -134,6 +136,7 @@ export default function BookingApp() {
       setBanner("Network problem.");
       setRetryable(true);
     } finally {
+      inFlight.current = false;
       setSubmitting(false);
     }
   }
@@ -141,7 +144,7 @@ export default function BookingApp() {
   function bookAnother() {
     setConfirmed(null);
     setSelected(null);
-    setIdemKey(null);
+    keyRef.current = null;
     loadSlots();
   }
 
